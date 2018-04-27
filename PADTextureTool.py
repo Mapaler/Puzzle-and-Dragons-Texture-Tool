@@ -389,7 +389,7 @@ def getOutputFileName(suggestedFileName):
 	# If the file is a "monster file" then pad the ID out with extra zeroes.
 	try:
 		prefix, id, suffix = getOutputFileName.monsterFileNameRegex.match(suggestedFileName).groups()
-		outputFileName = prefix + id.zfill(5) + suffix
+		outputFileName = prefix + id.zfill(4) + suffix
 	except AttributeError:
 		pass
 	
@@ -418,7 +418,8 @@ def main():
 		if zipfile.is_zipfile(inputFilePath):
 			with zipfile.ZipFile(inputFilePath, 'r') as apkFile:
 				fileContents = apkFile.read('assets/DATA001.BIN')
-		
+		elif os.path.splitext(inputFilePath)[1] == ".ogg" or os.path.splitext(inputFilePath)[1] == ".wav":
+			continue
 		else:
 			with open(inputFilePath, 'rb') as binaryFile:
 				fileContents = binaryFile.read()
