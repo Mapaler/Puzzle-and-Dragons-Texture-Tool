@@ -1,0 +1,5 @@
+/APK_*
+/Data_*
+/temp
+/__pycache__
+*.apk
