@@ -432,6 +432,8 @@ def main():
 				fileContents = apkFile.read('assets/DATA001.BIN')
 		elif os.path.splitext(inputFilePath)[1] == ".ogg" or os.path.splitext(inputFilePath)[1] == ".wav":
 			continue
+		elif "\\.git\\" in inputFilePath: 
+			continue
 		else:
 			with open(inputFilePath, 'rb') as binaryFile:
 				fileContents = binaryFile.read()
