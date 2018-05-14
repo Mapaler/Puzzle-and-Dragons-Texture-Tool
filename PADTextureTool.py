@@ -384,18 +384,28 @@ def getSettingsFromCommandLine():
 	
 	return settings
 
-def getOutputFileName(suggestedFileName):
+def getOutputFileName(suggestedFileName, inputFileName):
 	outputFileName = suggestedFileName
-	'''
-	# If the file is a "monster file" then pad the ID out with extra zeroes.
+	addPrefix = True
+	# If the file is a "card file" then pad the ID out with extra zeroes.
 	try:
-		prefix, id, suffix = getOutputFileName.monsterFileNameRegex.match(suggestedFileName).groups()
-		outputFileName = prefix + id.zfill(4) + suffix
+		prefix, id, suffix = getOutputFileName.cardFileNameRegex.match(suggestedFileName).groups()
+		outputFileName = prefix + id.zfill(3) + suffix
+		addPrefix = False
 	except AttributeError:
 		pass
-	'''
+	# If the file is a "monster file" then pad the ID out with extra zeroes.
+	try:
+		prefix, id, index, suffix = getOutputFileName.monsterFileNameRegex.match(suggestedFileName).groups()
+		outputFileName = prefix + id.zfill(4) + (index or "") + suffix
+		addPrefix = False
+	except AttributeError:
+		pass
 	# If we've already written a file with this name then add a number to the file name to prevent collisions.
 	try:
+		if addPrefix:
+			inputFileWithoutExtension, inputFileExtension = os.path.splitext(inputFileName)
+			outputFileName = inputFileWithoutExtension + "_" + outputFileName
 		getOutputFileName.filesWritten[outputFileName] += 1
 		outputFileWithoutExtension, outputFileExtension = os.path.splitext(outputFileName)
 		outputFileName = "{} ({}){}".format(outputFileWithoutExtension, getOutputFileName.filesWritten[outputFileName], outputFileExtension)
@@ -405,7 +415,8 @@ def getOutputFileName(suggestedFileName):
 	return outputFileName
 
 getOutputFileName.filesWritten = dict()
-getOutputFileName.monsterFileNameRegex = re.compile(r'^(MONS_)(\d+)(\..+)$', flags=re.IGNORECASE)
+getOutputFileName.cardFileNameRegex = re.compile(r'^(CARDS_)(\d+)(\..+)$', flags=re.IGNORECASE)
+getOutputFileName.monsterFileNameRegex = re.compile(r'^(MONS_)(\d+)(_\d+)?(\..+)$', flags=re.IGNORECASE)
 
 def main():
 	settings = getSettingsFromCommandLine()
@@ -426,14 +437,12 @@ def main():
 				fileContents = binaryFile.read()
 		
 		print("\nReading {}... ".format(inputFilePath))
-		# Getting the file's name
-		inputFile = os.path.basename(inputFilePath)
-		inputFileWithoutExtension, inputFileExtension = os.path.splitext(inputFile)
+		inputFile = os.path.basename(inputFilePath) # Getting the file's name
 		textures = list(TextureReader.extractTexturesFromBinaryBlob(fileContents, inputFilePath))
 		print("{} texture{} found.\n".format(str(len(textures)) if any(textures) else "No", "" if len(textures) == 1 else "s"))
 		
 		for texture in textures:
-			outputFileName = getOutputFileName("{}_{}".format(inputFile, texture.name))
+			outputFileName = getOutputFileName(texture.name, inputFile)
 			
 			print("  Writing {} ({} x {})...".format(outputFileName, texture.width, texture.height))
 			if texture.encoding in [PVRTC2BPP, PVRTC4BPP]:
