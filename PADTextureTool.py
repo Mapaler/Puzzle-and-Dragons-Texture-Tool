@@ -386,13 +386,14 @@ def getSettingsFromCommandLine():
 
 def getOutputFileName(suggestedFileName):
 	outputFileName = suggestedFileName
+	'''
 	# If the file is a "monster file" then pad the ID out with extra zeroes.
 	try:
 		prefix, id, suffix = getOutputFileName.monsterFileNameRegex.match(suggestedFileName).groups()
 		outputFileName = prefix + id.zfill(4) + suffix
 	except AttributeError:
 		pass
-	
+	'''
 	# If we've already written a file with this name then add a number to the file name to prevent collisions.
 	try:
 		getOutputFileName.filesWritten[outputFileName] += 1
@@ -425,11 +426,14 @@ def main():
 				fileContents = binaryFile.read()
 		
 		print("\nReading {}... ".format(inputFilePath))
+		# Getting the file's name
+		inputFile = os.path.basename(inputFilePath)
+		inputFileWithoutExtension, inputFileExtension = os.path.splitext(inputFile)
 		textures = list(TextureReader.extractTexturesFromBinaryBlob(fileContents, inputFilePath))
 		print("{} texture{} found.\n".format(str(len(textures)) if any(textures) else "No", "" if len(textures) == 1 else "s"))
 		
 		for texture in textures:
-			outputFileName = getOutputFileName(texture.name)
+			outputFileName = getOutputFileName("{}_{}".format(inputFile, texture.name))
 			
 			print("  Writing {} ({} x {})...".format(outputFileName, texture.width, texture.height))
 			if texture.encoding in [PVRTC2BPP, PVRTC4BPP]:
