@@ -3,6 +3,8 @@ Puzzle & Dragons Texture Tool
 
 The Puzzle & Dragons Texture Tool is a python script which extracts texture images from the binary data of the popular iOS & Android game "Puzzle & Dragons" (also known as "Puzzle and Dragons" or simply "PAD".)
 
+*Use Python 3*
+
 Example Usage
 ------
 
