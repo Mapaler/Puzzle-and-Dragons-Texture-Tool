@@ -1,7 +1,9 @@
-/APK_*
-/Data_*
+/APK*
+/Data*
 /temp
 /__pycache__
 *.apk
 /png.pyc
 /Tencent
+/tempe
+/tencentzlmcs
