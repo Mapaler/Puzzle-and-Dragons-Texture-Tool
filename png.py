@@ -60,7 +60,7 @@ and understood (when reading): ``tRNS``, ``bKGD``, ``gAMA``.
 The ``sBIT`` chunk can be used to specify precision for
 non-native bit depths.
 
-Requires Python 3.4 or higher (or Python 2.7).
+Requires Python 3.5 or higher.
 Installation is trivial,
 but see the ``README.txt`` file (with the source distribution) for details.
 
@@ -169,9 +169,7 @@ the PNG image comes from something that uses a similar format
 (for example, 1-bit BMPs, or another PNG file).
 """
 
-from __future__ import print_function
-
-__version__ = "0.0.19"
+__version__ = "0.20220715.0"
 
 import collections
 import io   # For io.BytesIO
@@ -281,7 +279,7 @@ def check_sizes(size, width, height):
 
     if len(size) != 2:
         raise ProtocolError(
-            "size argument should be a pair (width, height)")
+            "size argument should be a pair (width, height) instead is %r" % (size,))
     if width is not None and width != size[0]:
         raise ProtocolError(
             "size[0] (%r) and width (%r) should match when both are used."
@@ -348,7 +346,7 @@ class ChunkError(FormatError):
 
 
 class Default:
-    """The default for the greyscale paramter."""
+    """The default for the greyscale parameter."""
 
 
 class Writer:
@@ -502,10 +500,10 @@ class Writer:
         Values from 1 to 9 (highest) specify compression.
         0 means no compression.
         -1 and ``None`` both mean that the ``zlib`` module uses
-        the default level of compession (which is generally acceptable).
+        the default level of compression (which is generally acceptable).
 
         If `interlace` is true then an interlaced image is created
-        (using PNG's so far only interace method, *Adam7*).
+        (using PNG's so far only interlace method, *Adam7*).
         This does not affect how the pixels should be passed in,
         rather it changes how they are arranged into the PNG file.
         On slow connexions interlaced images can be
@@ -658,7 +656,7 @@ class Writer:
                 if wrong_length:
                     # Note: row numbers start at 0.
                     raise ProtocolError(
-                        "Expected %d values but got %d value, in row %d" %
+                        "Expected %d values but got %d values, in row %d" %
                         (vpr, len(row), i))
                 yield row
 
@@ -672,6 +670,7 @@ class Writer:
             raise ProtocolError(
                 "rows supplied (%d) does not match height (%d)" %
                 (nrows, self.height))
+        return nrows
 
     def write_passes(self, outfile, rows):
         """
@@ -733,6 +732,9 @@ class Writer:
         # it's compressed when sufficiently large.
         data = bytearray()
 
+        # raise i scope out of the for loop. set to -1, because the for loop
+        # sets i to 0 on the first pass
+        i = -1
         for i, row in enumerate(rows):
             # Add "None" filter type.
             # Currently, it's essential that this filter type be used
@@ -744,8 +746,7 @@ class Writer:
             data.append(0)
             data.extend(row)
             if len(data) > self.chunk_limit:
-                # :todo: bytes() only necessary in Python 2
-                compressed = compressor.compress(bytes(data))
+                compressed = compressor.compress(data)
                 if len(compressed):
                     write_chunk(outfile, b'IDAT', compressed)
                 data = bytearray()
@@ -760,7 +761,16 @@ class Writer:
 
     def write_preamble(self, outfile):
         # http://www.w3.org/TR/PNG/#5PNG-file-signature
-        outfile.write(signature)
+
+        # This is the first write that is made when
+        # writing a PNG file.
+        # This one, and only this one, is checked for TypeError,
+        # which generally indicates that we are writing bytes
+        # into a text stream.
+        try:
+            outfile.write(signature)
+        except TypeError as e:
+            raise ProtocolError("PNG must be written to a binary stream") from e
 
         # http://www.w3.org/TR/PNG/#11IHDR
         write_chunk(outfile, b'IHDR',
@@ -833,9 +843,15 @@ class Writer:
                 # Coerce to array type
                 fmt = 'BH'[self.bitdepth > 8]
                 pixels = array(fmt, pixels)
-            self.write_passes(outfile, self.array_scanlines_interlace(pixels))
+            return self.write_passes(
+                outfile,
+                self.array_scanlines_interlace(pixels)
+            )
         else:
-            self.write_passes(outfile, self.array_scanlines(pixels))
+            return self.write_passes(
+                outfile,
+                self.array_scanlines(pixels)
+            )
 
     def array_scanlines(self, pixels):
         """
@@ -1282,6 +1298,13 @@ class Image:
         with open(file, 'wb') as fd:
             w.write(fd, self.rows)
 
+    def stream(self):
+        """Stream the rows into a list, so that the rows object
+        can be accessed multiple times, or randomly.
+        """
+
+        self.rows = list(self.rows)
+
     def write(self, file):
         """Write the image to the open file object.
 
@@ -1383,12 +1406,6 @@ class Reader:
             raise ChunkError('Chunk %s too short for checksum.' % type)
         verify = zlib.crc32(type)
         verify = zlib.crc32(data, verify)
-        # Whether the output from zlib.crc32 is signed or not varies
-        # according to hideous implementation details, see
-        # http://bugs.python.org/issue1202 .
-        # We coerce it to be positive here (in a way which works on
-        # Python 2.3 and older).
-        verify &= 2**32 - 1
         verify = struct.pack('!I', verify)
         if checksum != verify:
             (a, ) = struct.unpack('!I', checksum)
@@ -1586,11 +1603,19 @@ class Reader:
         """
         If signature (header) has not been read then read and
         validate it; otherwise do nothing.
+        No signature (empty read()) will raise EOFError;
+        An invalid signature will raise FormatError.
+        EOFError is raised to make possible the case where
+        a program can read multiple PNG files from the same stream.
+        The end of the stream can be distinguished from non-PNG files
+        or corrupted PNG files.
         """
 
         if self.signature:
             return
         self.signature = self.file.read(8)
+        if len(self.signature) == 0:
+            raise EOFError("End of PNG stream.")
         if self.signature != signature:
             raise FormatError("PNG file has invalid signature.")
 
@@ -2307,11 +2332,7 @@ def binary_stdin():
     A sys.stdin that returns bytes.
     """
 
-    try:
-        return sys.stdin.buffer
-    except AttributeError:
-        # Probably Python 2, where bytes are strings.
-        return sys.stdin
+    return sys.stdin.buffer
 
 
 def binary_stdout():
@@ -2319,12 +2340,7 @@ def binary_stdout():
     A sys.stdout that accepts bytes.
     """
 
-    # First there is a Python3 issue.
-    try:
-        stdout = sys.stdout.buffer
-    except AttributeError:
-        # Probably Python 2, where bytes are strings.
-        stdout = sys.stdout
+    stdout = sys.stdout.buffer
 
     # On Windows the C runtime file orientation needs changing.
     if sys.platform == "win32":
@@ -2344,8 +2360,9 @@ def cli_open(path):
 def main(argv):
     """
     Run command line PNG.
+    Which reports version.
     """
-    print("What should the command line tool do?", file=sys.stderr)
+    print(__version__, __file__)
 
 
 if __name__ == '__main__':
